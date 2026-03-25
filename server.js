@@ -8,13 +8,22 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
+// Render sets the PORT environment variable. If not set, it defaults to 5000 for local testing.
 const PORT = process.env.PORT || 5000;
 
-// Serve static files from Vite's 'dist' directory after build
-app.use(express.static(path.join(__dirname, 'dist')));
+// Add COOP/COEP headers required for MediaPipe/TFLite (SharedArrayBuffer)
+app.use((req, res, next) => {
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+  res.setHeader('Cross-Origin-Embedder-Policy', 'require-corp');
+  next();
+});
 
 app.use(cors());
 app.use(express.json());
+
+// Serve static files from Vite's 'dist' directory after build
+const distPath = path.join(__dirname, 'dist');
+app.use(express.static(distPath));
 
 const HISTORY_FILE = path.join(__dirname, 'history.json');
 
@@ -42,7 +51,6 @@ app.post('/api/history', (req, res) => {
     const data = fs.readFileSync(HISTORY_FILE, 'utf8');
     const history = JSON.parse(data);
 
-    // Auto-limit history to 100 items
     const newEntry = { sign, timestamp: timestamp || new Date().toISOString() };
     const newHistory = [newEntry, ...history].slice(0, 100);
 
@@ -55,7 +63,6 @@ app.post('/api/history', (req, res) => {
 
 // ── GET Dictionary ──
 app.get('/api/dictionary', (req, res) => {
-  // Simple static dictionary for production readiness
   const dictionary = [
     "HELLO", "HELP", "THANKYOU", "PLEASE", "YES", "NO", "LOVE", "PEACE",
     "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z",
@@ -64,11 +71,24 @@ app.get('/api/dictionary', (req, res) => {
   res.json(dictionary);
 });
 
-// ── Catch-all: Route all other requests to index.html (SPA support) ──
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'dist', 'index.html'));
+// ── Health Check ──
+app.get('/health', (req, res) => {
+  res.status(200).send('OK');
 });
 
-app.listen(PORT, () => {
-  console.log(`[SignLens] Running at port ${PORT}`);
+// ── Catch-all: Route all other requests to index.html (SPA support) ──
+app.get('*', (req, res) => {
+  const indexFile = path.join(distPath, 'index.html');
+  if (fs.existsSync(indexFile)) {
+    res.sendFile(indexFile);
+  } else {
+    res.status(404).send('Build files not found. Ensure "npm run build" was executed.');
+  }
+});
+
+// Bind to 0.0.0.0 to ensure it is accessible on Render's network
+app.listen(PORT, '0.0.0.0', () => {
+  console.log(`[SignLens] Production server is running!`);
+  console.log(`- Port: ${PORT}`);
+  console.log(`- Assets: ${distPath}`);
 });
