@@ -1,0 +1,229 @@
+/* SignReference.css — Light & Premium Elite theme */
+
+.sign-reference {
+  background: #ffffff;
+  border: 1px solid var(--clr-border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  box-shadow: var(--shadow-premium);
+  max-height: calc(100vh - 160px);
+  overflow-y: auto;
+}
+
+.ref-header {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ref-header h3 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 900;
+  color: #1e293b;
+  letter-spacing: -0.02em;
+}
+
+.ref-sub {
+  font-size: 13px;
+  color: var(--clr-muted);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.ref-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(85px, 1fr));
+  gap: 12px;
+}
+
+.ref-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 16px 8px;
+  border-radius: 16px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  cursor: default;
+  transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  text-align: center;
+}
+
+.ref-card:hover {
+  background: #ffffff;
+  border-color: var(--clr-accent-lt);
+  transform: translateY(-4px);
+  box-shadow: 0 10px 20px -5px rgba(79, 70, 229, 0.1);
+}
+
+.ref-card--active {
+  background: #eff6ff !important;
+  border-color: var(--clr-accent) !important;
+  box-shadow: 0 8px 25px -5px rgba(79, 70, 229, 0.2) !important;
+  transform: translateY(-4px) scale(1.05);
+}
+
+.ref-letter {
+  font-size: 28px;
+  font-weight: 900;
+  color: #334155;
+  line-height: 1;
+}
+
+.ref-card--active .ref-letter {
+  color: var(--clr-accent);
+}
+
+.ref-hint {
+  font-size: 10px;
+  color: #94a3b8;
+  font-weight: 600;
+  line-height: 1.25;
+  text-align: center;
+  word-break: break-word;
+}
+
+.ref-card--active .ref-hint {
+  color: var(--clr-accent-lt);
+}
+
+.ref-header-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.ref-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ref-tabs {
+  display: flex;
+  background: #f1f5f9;
+  padding: 4px;
+  border-radius: 14px;
+  gap: 4px;
+}
+
+.ref-tab-btn {
+  padding: 8px 16px;
+  border-radius: 10px;
+  border: none;
+  background: transparent;
+  color: #64748b;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.ref-tab-btn:hover {
+  color: #1e293b;
+}
+
+.ref-tab-btn.active {
+  background: #ffffff;
+  color: var(--clr-accent);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+.ref-toggle-row {
+  display: flex;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--clr-border);
+}
+
+.ref-sub-toggle {
+  flex: 1;
+  padding: 8px;
+  border-radius: 10px;
+  border: 1px solid var(--clr-border);
+  background: transparent;
+  color: var(--clr-muted);
+  font-size: 11px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.ref-sub-toggle:hover {
+  background: #f8fafc;
+  color: #1e293b;
+}
+
+.ref-sub-toggle.active {
+  background: #ffffff;
+  border-color: var(--clr-accent-lt);
+  color: var(--clr-accent);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+}
+
+.ref-toggle-btn {
+  display: none;
+}
+
+/* Chart Styles */
+.ref-chart-container {
+  position: relative;
+  width: 100%;
+  border-radius: 16px;
+  overflow: hidden;
+  border: 2px solid #ffffff;
+  background: #f1f5f9;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
+}
+
+.ref-chart-img {
+  width: 100%;
+  height: auto;
+  display: block;
+  object-fit: contain;
+  mix-blend-mode: multiply;
+  padding: 2px;
+}
+
+/* Animation */
+.animate-fade-in {
+  animation: fadeIn 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(15px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Scrollbar customization for the ref panel */
+.sign-reference::-webkit-scrollbar {
+  width: 5px;
+}
+.sign-reference::-webkit-scrollbar-track {
+  background: transparent;
+}
+.sign-reference::-webkit-scrollbar-thumb {
+  background: #e2e8f0;
+  border-radius: 10px;
+}
+.sign-reference::-webkit-scrollbar-thumb:hover {
+  background: #cbd5e1;
+}

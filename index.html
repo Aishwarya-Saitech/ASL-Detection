@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🖐</text></svg>" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="Real-time American Sign Language (ASL) detection using MediaPipe Hands and TensorFlow.js — no Python required." />
+    <title>ASL Detector · Real-time Sign Language Recognition</title>
+
+    <!-- Required for @mediapipe/hands and @tensorflow/tfjs-tflite (SharedArrayBuffer) -->
+    <!-- Required for @mediapipe/hands and @tensorflow/tfjs-tflite (SharedArrayBuffer)
+    <meta http-equiv="Cross-Origin-Opener-Policy" content="same-origin" />
+    <meta http-equiv="Cross-Origin-Embedder-Policy" content="require-corp" />
+    -->
+
+    <!-- CDN loads for non-ESM libraries (MediaPipe) -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands@0.4.1675469240/hands.js" crossorigin="anonymous"></script>
+    <!-- TF and TFLite now run in /src/workers/classifierWorker.js to avoid scope conflicts -->
+    <!-- <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.22.0/dist/tf.min.js" crossorigin="anonymous"></script> -->
+    <!-- <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-tflite@0.0.1-alpha.10/dist/tf-tflite.min.js" crossorigin="anonymous"></script> -->
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>
