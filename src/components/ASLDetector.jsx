@@ -18,6 +18,8 @@ import {
   drawBoundingRect,
   drawInfoText,
   drawInfo,
+  recognizeHandGesture,
+  recognizeTwoHandGesture, // New multi-hand recognizer
 } from '../utils/landmarkUtils';
 import { FpsCalc } from '../utils/fpsCalc';
 import './ASLDetector.css';
@@ -49,6 +51,37 @@ export default function ASLDetector({ onDetection }) {
 
   // Keep a ref to the latest processed landmarks for the key-press logger
   const latestLandmarksRef = useRef(null);
+
+
+  // ── History Tracking ─────────────────────────────────────────────────────
+  const [history, setHistory] = useState([]);
+
+  useEffect(() => {
+    const loadHistory = async () => {
+      try {
+        const res = await fetch('http://localhost:5000/api/history');
+        if (res.ok) setHistory(await res.json());
+      } catch (err) { /* silent */ }
+    };
+    loadHistory();
+    const interval = setInterval(loadHistory, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const saveToHistory = useCallback(async (sign) => {
+    try {
+      const res = await fetch('http://localhost:5000/api/history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sign, timestamp: new Date().toISOString() }),
+      });
+      console.log("res:", res);
+
+      if (res.ok) setHistory(prev => [{ sign, timestamp: new Date().toISOString() }, ...prev].slice(0, 100));
+    } catch (err) {
+      console.warn('[SignLens] Could not save history');
+    }
+  }, []);
 
   const { ready: handsReady, error: handsError, detect } = useHandDetection({
     minDetectionConfidence: 0.7,
@@ -121,6 +154,18 @@ export default function ASLDetector({ onDetection }) {
     setFps(0);
   }, []);
 
+  // ── Speech Synthesis ────────────────────────────────────────────────────
+  const speak = useCallback((text) => {
+    if (!('speechSynthesis' in window)) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 0.9;
+    utterance.pitch = 1.0;
+    window.speechSynthesis.speak(utterance);
+  }, []);
+
+
+
   // ── Detection loop — mirrors Python while True: loop ─────────────────────
   useEffect(() => {
     if (!cameraOn || !modelsReady) return;
@@ -149,14 +194,13 @@ export default function ASLDetector({ onDetection }) {
 
       const ctx = canvas.getContext('2d');
 
-      // Mirror display — cv.flip(image, 1) in Python
+      // Mirror display
       ctx.save();
       ctx.translate(w, 0);
       ctx.scale(-1, 1);
       ctx.drawImage(video, 0, 0, w, h);
       ctx.restore();
 
-      // Run MediaPipe Hands
       const results = await detect(video);
 
       const currentFps = fpsCalcRef.current.get();
@@ -165,37 +209,48 @@ export default function ASLDetector({ onDetection }) {
       let detectedThisFrame = null;
 
       if (results?.multiHandLandmarks?.length) {
-        setHandCount(results.multiHandLandmarks.length);
+        const hCount = results.multiHandLandmarks.length;
+        setHandCount(hCount);
 
-        for (let hi = 0; hi < results.multiHandLandmarks.length; hi++) {
-          const landmarks = results.multiHandLandmarks[hi];
-          const handednessInfo = results.multiHandedness?.[hi];
-          const handLabel = handednessInfo?.label ?? 'Unknown';
+        const allMirroredLists = results.multiHandLandmarks.map(lms =>
+          calcLandmarkList(w, h, lms).map(([x, y]) => [w - x, y])
+        );
 
-          // calc_landmark_list
-          const landmarkList = calcLandmarkList(w, h, landmarks);
+        // 1. Two-Hand Global Priority (HELP, MORE)
+        const multiHandMatch = recognizeTwoHandGesture(allMirroredLists);
+        if (multiHandMatch) {
+          detectedThisFrame = multiHandMatch;
+          // Visual: Highlight both hands with same label
+          for (let hi = 0; hi < hCount; hi++) {
+            const brect = calcBoundingRect(allMirroredLists[hi]);
+            drawBoundingRect(ctx, brect);
+            drawLandmarks(ctx, allMirroredLists[hi]);
+            const handLabel = results.multiHandedness?.[hi]?.label ?? '';
+            drawInfoText(ctx, brect, handLabel, multiHandMatch);
+          }
+        } else {
+          // 2. Individual Hand Analysis
+          for (let hi = 0; hi < hCount; hi++) {
+            const mirroredList = allMirroredLists[hi];
+            const brect = calcBoundingRect(mirroredList);
+            const flat = preProcessLandmark(mirroredList);
+            latestLandmarksRef.current = flat;
 
-          // Mirror X coords for flipped display
-          const mirroredList = landmarkList.map(([x, y]) => [w - x, y]);
+            const heuristicMatch = recognizeHandGesture(mirroredList);
+            let label = heuristicMatch;
 
-          // calc_bounding_rect
-          const brect = calcBoundingRect(mirroredList);
+            if (!label) {
+              const prediction = await classify(flat);
+              if (prediction) label = prediction.label;
+            }
 
-          // pre_process_landmark
-          const flat = preProcessLandmark(mirroredList);
-
-          // Store latest pre-processed points for the key-press logger
-          latestLandmarksRef.current = flat;
-
-          // KeyPointClassifier (Now Async / Worker-based)
-          const prediction = await classify(flat);
-
-          // Drawing — mirrors Python drawing functions
-          drawBoundingRect(ctx, brect);
-          drawLandmarks(ctx, mirroredList);
-          if (prediction) {
-            drawInfoText(ctx, brect, handLabel, prediction.label);
-            detectedThisFrame = prediction.label;
+            drawBoundingRect(ctx, brect);
+            drawLandmarks(ctx, mirroredList);
+            if (label) {
+              const handLabel = results.multiHandedness?.[hi]?.label ?? 'Unknown';
+              drawInfoText(ctx, brect, handLabel, label);
+              detectedThisFrame = label;
+            }
           }
         }
       } else {
@@ -203,15 +258,23 @@ export default function ASLDetector({ onDetection }) {
         latestLandmarksRef.current = null;
       }
 
-      // FPS + mode overlay
       drawInfo(ctx, currentFps, modeRef.current, numberRef.current);
 
-      // Subtitle accumulation with stability check (~0.5 s @ 30 fps)
       if (detectedThisFrame) {
         if (detectedThisFrame === lastSign) {
           signStableCount++;
-          if (signStableCount === 15) {
+          // Stability threshold (reduced for words/letters speed)
+          const threshold = detectedThisFrame.length > 1 ? 25 : 12;
+
+          if (signStableCount === threshold) {
             setDetectedSign(detectedThisFrame);
+
+            // Speak if it's a word
+            if (detectedThisFrame.length > 1) {
+              speak(detectedThisFrame);
+              saveToHistory(detectedThisFrame);
+            }
+
             setSubtitles((prev) => {
               const next = [...prev, detectedThisFrame];
               return next.length > 30 ? next.slice(next.length - 30) : next;
@@ -238,10 +301,9 @@ export default function ASLDetector({ onDetection }) {
       runningRef.current = false;
       if (animFrameRef.current) cancelAnimationFrame(animFrameRef.current);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cameraOn, modelsReady, detect, classify]);
+  }, [cameraOn, modelsReady, detect, classify, speak, saveToHistory]);
 
-  // ── Keyboard mode switching — mirrors select_mode() in Python ─────────────
+  // ── Keyboard mode switching ─────────────────────────────────────────────
   useEffect(() => {
     function handleKey(e) {
       if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
@@ -253,42 +315,57 @@ export default function ASLDetector({ onDetection }) {
       } else if (key === 'k' || key === 'K') {
         modeRef.current = MODE_LOG_KEYPOINT;
         setMode(MODE_LOG_KEYPOINT);
+      } else if (key === 's' || key === 'S') {
+        // Speak current buffer
+        const fullWord = subtitles.join('');
+        if (fullWord) speak(fullWord);
       } else {
-        // Logging Trigger
         let index = -1;
+        // A-Z (0-25)
         if (key >= 'A' && key <= 'Z') index = key.charCodeAt(0) - 65;
         if (key >= 'a' && key <= 'z') index = key.charCodeAt(0) - 97;
+        // 0-9 (26-35)
         if (key >= '0' && key <= '9') index = parseInt(key) + 26;
+
+        // Custom keys for words (36+)
+        if (key === '!') index = 36; // HELLO
+        if (key === '@') index = 37; // HELP
+        if (key === '#') index = 38; // THANKYOU
+        if (key === '$') index = 39; // PLEASE
+        if (key === '%') index = 40; // YES
+        if (key === '^') index = 41; // NO
+        if (key === '&') index = 42; // LOVE
+        if (key === '*') index = 43; // PEACE
+        if (key === '(') index = 44; // OK
 
         if (index !== -1) {
           numberRef.current = index;
-          // Capture current landmarks and prepend the index
           if (modeRef.current === MODE_LOG_KEYPOINT && latestLandmarksRef.current) {
             const row = [index, ...latestLandmarksRef.current];
             setCaptureList((prev) => [...prev, row]);
-            console.log(`[Captured] ID:${index} (${key}) - Samples: ${captureList.length + 1}`);
           }
         }
       }
     }
     window.addEventListener('keydown', handleKey);
     return () => window.removeEventListener('keydown', handleKey);
-  }, [captureList.length]); // Re-bind when list length changes to keep console log count accurate
+  }, [captureList.length, subtitles, speak]);
 
   const clearSubtitles = () => setSubtitles([]);
 
   const modeLabel = mode === MODE_LOG_KEYPOINT ? 'Logging Key Point' : 'Inference';
 
+
+
   return (
     <div className="asl-detector">
       {/* ── Header ── */}
-      <div className="detector-header">
+      <div className="detector-header glass-panel">
         <div className="header-left">
           <div className="status-row">
             <div className={`status-dot ${modelsReady ? 'ready' : 'loading'}`} />
             <span className="status-label">
-              {/* {modelsReady ? 'Models Ready' : loadingStatus} */}
-              {modelsReady ? 'Models Ready' : loadingStatus}
+              {modelsReady ? 'SignLens AI Active' : loadingStatus}
             </span>
           </div>
           <div className="mode-badge">{modeLabel}</div>
@@ -307,7 +384,7 @@ export default function ASLDetector({ onDetection }) {
 
       {/* ── Errors ── */}
       {(handsError || classifierError || cameraError) && (
-        <div className="error-banner" role="alert">
+        <div className="error-banner animate-fade-in" role="alert">
           <span className="error-icon">⚠️</span>
           <span>{handsError || classifierError || cameraError}</span>
         </div>
@@ -315,15 +392,17 @@ export default function ASLDetector({ onDetection }) {
 
       {/* ── Loading progress bar ── */}
       {!modelsReady && !handsError && !classifierError && (
-        <div className="loading-bar-wrap" aria-label="Loading models">
+        <div className="loading-bar-wrap">
           <div className="loading-bar" />
         </div>
       )}
 
       {/* ── Video Canvas ── */}
-      <div className="video-container">
+      <div className={`video-container ${cameraOn ? 'glow-feed' : ''}`}>
         <video ref={videoRef} className="hidden-video" playsInline muted />
         <canvas ref={canvasRef} className="detection-canvas" id="asl-canvas" />
+
+        {cameraOn && <div className="scanline" />}
 
         {!cameraOn && (
           <div className="camera-placeholder">
@@ -331,8 +410,8 @@ export default function ASLDetector({ onDetection }) {
             <p>Vision Feed Paused</p>
             <p className="placeholder-sub">
               {modelsReady
-                ? 'Ready for SignLens detection'
-                : 'Awaiting AI core connection…'}
+                ? 'Ready for intelligent recognition'
+                : 'Connecting to AI neural core…'}
             </p>
           </div>
         )}
@@ -342,7 +421,7 @@ export default function ASLDetector({ onDetection }) {
           <div className="recording-overlay animate-fade-in">
             <div className="rec-dot" />
             <div className="rec-text">
-              LOGGING MODE: Press keys to record
+              LOGGING MODE: Record Dataset
               <span className="capture-count">{captureList.length} samples</span>
             </div>
           </div>
@@ -350,7 +429,8 @@ export default function ASLDetector({ onDetection }) {
 
         {/* Live sign badge overlay */}
         {cameraOn && detectedSign && (
-          <div className="live-sign-badge" aria-live="polite" aria-label={`Detected: ${detectedSign}`}>
+          <div className="live-sign-badge" aria-live="polite">
+            <div className="detecting-pulse" />
             <span className="sign-letter">{detectedSign}</span>
           </div>
         )}
@@ -365,11 +445,11 @@ export default function ASLDetector({ onDetection }) {
             onClick={startCamera}
             disabled={!modelsReady}
           >
-            {modelsReady ? '▶ Start Camera' : '⏳ Loading…'}
+            {modelsReady ? '▶ Start Intelligence' : '⏳ Initializing…'}
           </button>
         ) : (
           <button id="btn-stop-camera" className="btn btn-danger" onClick={stopCamera}>
-            ⏹ Stop Camera
+            ⏹ Stop Vision
           </button>
         )}
         <button
@@ -385,11 +465,11 @@ export default function ASLDetector({ onDetection }) {
             className="btn btn-primary btn-dataset animate-fade-in"
             onClick={downloadDataset}
           >
-            📥 Download ({captureList.length}) Samples
+            📥 Export Dataset ({captureList.length})
           </button>
         )}
 
-        <div className="mode-toggle">
+        <div className="mode-toggle glass-panel">
           <button
             id="btn-mode-inference"
             className={`btn btn-sm ${mode === MODE_INFERENCE ? 'btn-active' : 'btn-ghost'}`}
@@ -407,20 +487,20 @@ export default function ASLDetector({ onDetection }) {
         </div>
       </div>
 
-      {/* ── Subtitle / accumulation strip ── */}
-      <div className="subtitle-section">
+      {/* ── Subtitle / Interpetation ── */}
+      <div className="subtitle-section glass-panel">
         <div className="subtitle-header">
-          <span>💬 Interpreted Results</span>
-          {subtitles.length > 0 && (
-            <span className="subtitle-count">{subtitles.length} letters</span>
-          )}
+          <span>💬 Interpretation Stream</span>
+          <div className="header-chips">
+            {subtitles.length > 0 && <span className="subtitle-count">{subtitles.length} units</span>}
+          </div>
         </div>
         <div className="subtitle-strip" id="subtitle-strip" aria-live="polite">
           {subtitles.length === 0 ? (
-            <span className="subtitle-empty">Start signing to see detected letters here…</span>
+            <span className="subtitle-empty">Sign letters or words to see them interpreted here…</span>
           ) : (
             subtitles.map((letter, i) => (
-              <span key={i} className="subtitle-letter">
+              <span key={i} className="subtitle-letter animate-fade-in">
                 {letter}
               </span>
             ))
@@ -428,25 +508,52 @@ export default function ASLDetector({ onDetection }) {
         </div>
         {subtitles.length > 0 && (
           <div className="subtitle-word">
-            <span className="word-label">Word:</span>
-            <span className="word-value">{subtitles.join('')}</span>
-            <button
-              className="btn btn-sm btn-ghost copy-btn"
-              onClick={() => navigator.clipboard?.writeText(subtitles.join(''))}
-              title="Copy to clipboard"
-            >
-              📋
-            </button>
+            <span className="word-label">Output:</span>
+            <span className="word-value">{subtitles.join(' ')}</span>
+            <div className="word-actions">
+              <button
+                className="btn btn-sm btn-ghost"
+                onClick={() => speak(subtitles.join(' '))}
+                title="Speak text"
+              >
+                🔊 Speak
+              </button>
+              <button
+                className="btn btn-sm btn-ghost"
+                onClick={() => navigator.clipboard?.writeText(subtitles.join(' '))}
+                title="Copy to clipboard"
+              >
+                📋 Copy
+              </button>
+            </div>
           </div>
         )}
       </div>
 
+      {/* ── Session History (From Server) ── */}
+      {history.length > 0 && (
+        <div className="history-section animate-fade-in">
+          <div className="history-header">
+            <h4>Recent Recognitions</h4>
+          </div>
+          <div className="history-list">
+            {history.slice(0, 5).map((item, idx) => (
+              <div key={idx} className="history-item">
+                <span className="hist-val">{item.sign}</span>
+                <span className="hist-time">{new Date(item.timestamp).toLocaleTimeString()}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* ── Keyboard hint ── */}
-      <div className="keyboard-hint">
-        <span>⌨️</span>
-        <span><kbd>N</kbd> Inference</span>
-        <span><kbd>K</kbd> Log mode</span>
-        <span><kbd>A–Z / 0-9</kbd> Capture Sample</span>
+      <div className="keyboard-hint glass-panel">
+        <span>⌨️ Shortcuts:</span>
+        <span><kbd>N</kbd> Infer</span>
+        <span><kbd>K</kbd> Log</span>
+        <span><kbd>S</kbd> Speak</span>
+        <span><kbd>A–Z/!@#$</kbd> Capture</span>
       </div>
     </div>
   );

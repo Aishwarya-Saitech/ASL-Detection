@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "start": "node server.js",
     "lint": "eslint .",
     "preview": "vite preview"
   },
@@ -14,6 +15,8 @@
     "@tensorflow/tfjs": "^4.22.0",
     "@tensorflow/tfjs-backend-webgl": "^4.22.0",
     "@tensorflow/tfjs-tflite": "^0.0.1-alpha.10",
+    "cors": "^2.8.6",
+    "express": "^5.2.1",
     "react": "^19.2.4",
     "react-dom": "^19.2.4"
   },

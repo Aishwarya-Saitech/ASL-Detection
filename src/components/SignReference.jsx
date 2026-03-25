@@ -3,6 +3,7 @@ import './SignReference.css';
 
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
 const NUMBERS = '0123456789'.split('');
+const COMMON_WORDS = ['HELLO', 'HELP', 'THANKYOU', 'PLEASE', 'YES', 'NO', 'LOVE', 'PEACE', 'OK'];
 
 const ALPHABET_HINTS = {
   A: 'Fist, thumb up', B: 'Flat hand, thumb in', C: 'Curved C-shape', D: 'Finger + thumb circle',
@@ -27,16 +28,37 @@ const NUMBER_HINTS = {
   9: 'Thumb touches index finger'
 };
 
+const WORD_HINTS = {
+  'HELLO': 'Hand move from forehead out',
+  'HELP': 'Thumb up on flat palm',
+  'THANKYOU': 'Hand from chin out',
+  'PLEASE': 'Circular rub on chest',
+  'YES': 'Fist nodding',
+  'NO': 'Index + middle + thumb snap',
+  'LOVE': 'Index + pinky + thumb out (ILY)',
+  'PEACE': 'Two fingers V-shape',
+  'OK': 'Thumb + Index circle',
+};
+
 export default function SignReference({ activeSign }) {
-  const [view, setView] = useState('ALPHA'); // ALPHA, NUMS
+  const [view, setView] = useState('ALPHA'); // ALPHA, NUMS, WORDS
   const [showChart, setShowChart] = useState(true);
 
   const currentChart = view === 'ALPHA'
     ? '/ASL_Alphabet.jpg'
-    : '/How-to-Count-in-Sign-Language.jpg';
+    : view === 'NUMS' 
+      ? '/How-to-Count-in-Sign-Language.jpg'
+      : '/ASL_Alphabet.jpg'; // Placeholder for words chart
 
-  const currentList = view === 'ALPHA' ? ALPHABET : NUMBERS;
-  const currentHints = view === 'ALPHA' ? ALPHABET_HINTS : NUMBER_HINTS;
+  const currentList = 
+    view === 'ALPHA' ? ALPHABET : 
+    view === 'NUMS' ? NUMBERS : 
+    COMMON_WORDS;
+
+  const currentHints = 
+    view === 'ALPHA' ? ALPHABET_HINTS : 
+    view === 'NUMS' ? NUMBER_HINTS : 
+    WORD_HINTS;
 
   return (
     <div className="sign-reference">
@@ -59,6 +81,12 @@ export default function SignReference({ activeSign }) {
             >
               0-9
             </button>
+            <button
+              className={`ref-tab-btn ${view === 'WORDS' ? 'active' : ''}`}
+              onClick={() => setView('WORDS')}
+            >
+              Words
+            </button>
           </div>
         </div>
         <div className="ref-toggle-row">
@@ -77,7 +105,7 @@ export default function SignReference({ activeSign }) {
         </div>
       </div>
 
-      {showChart ? (
+      {showChart && view !== 'WORDS' ? (
         <div className="ref-chart-container animate-fade-in">
           <img src={currentChart} alt={`${view} Chart`} className="ref-chart-img" />
         </div>
@@ -89,7 +117,10 @@ export default function SignReference({ activeSign }) {
               className={`ref-card ${activeSign === char ? 'ref-card--active' : ''}`}
               title={currentHints[char]}
             >
-              <span className="ref-letter">{char}</span>
+              <div className="card-top">
+                <span className="ref-letter">{char}</span>
+                {activeSign === char && <span className="detecting-pulse" />}
+              </div>
               <span className="ref-hint">{currentHints[char]}</span>
             </div>
           ))}
