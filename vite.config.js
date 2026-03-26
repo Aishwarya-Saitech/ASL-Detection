@@ -6,22 +6,18 @@ export default defineConfig({
   plugins: [react()],
 
   server: {
-    /*
-        headers: {
-          // Required for MediaPipe Hands WASM + TFLite SharedArrayBuffer support
-          'Cross-Origin-Opener-Policy': 'same-origin',
-          'Cross-Origin-Embedder-Policy': 'require-corp',
-        },
-        */
+    headers: {
+      // Required for MediaPipe Hands WASM + TFLite SharedArrayBuffer support
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'require-corp',
+    },
   },
 
   preview: {
-    /*
-        headers: {
-          'Cross-Origin-Opener-Policy': 'same-origin',
-          'Cross-Origin-Embedder-Policy': 'require-corp',
-        },
-        */
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'require-corp',
+    },
   },
 
   optimizeDeps: {

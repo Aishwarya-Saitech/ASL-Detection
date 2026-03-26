@@ -53,34 +53,30 @@ export default function ASLDetector({ onDetection }) {
   const latestLandmarksRef = useRef(null);
 
 
-  // ── History Tracking ─────────────────────────────────────────────────────
+  // ── History Tracking (Client-Side Only) ──────────────────────────────────
   const [history, setHistory] = useState([]);
 
   useEffect(() => {
-    const loadHistory = async () => {
+    // Load history from localStorage on mount
+    const savedHistory = localStorage.getItem('asl_history');
+    if (savedHistory) {
       try {
-        const res = await fetch('http://localhost:5000/api/history');
-        if (res.ok) setHistory(await res.json());
-      } catch (err) { /* silent */ }
-    };
-    loadHistory();
-    const interval = setInterval(loadHistory, 10000);
-    return () => clearInterval(interval);
+        setHistory(JSON.parse(savedHistory));
+      } catch (err) {
+        console.error('Failed to parse history from localStorage', err);
+      }
+    }
   }, []);
 
-  const saveToHistory = useCallback(async (sign) => {
-    try {
-      const res = await fetch('http://localhost:5000/api/history', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ sign, timestamp: new Date().toISOString() }),
-      });
-      console.log("res:", res);
-
-      if (res.ok) setHistory(prev => [{ sign, timestamp: new Date().toISOString() }, ...prev].slice(0, 100));
-    } catch (err) {
-      console.warn('[SignLens] Could not save history');
-    }
+  const saveToHistory = useCallback((sign) => {
+    const timestamp = new Date().toISOString();
+    const newEntry = { sign, timestamp };
+    
+    setHistory(prev => {
+      const updated = [newEntry, ...prev].slice(0, 100);
+      localStorage.setItem('asl_history', JSON.stringify(updated));
+      return updated;
+    });
   }, []);
 
   const { ready: handsReady, error: handsError, detect } = useHandDetection({
